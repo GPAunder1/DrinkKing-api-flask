@@ -2,6 +2,7 @@ import flask
 import json
 import yaml
 from googlemap_api import Gmap_API
+from aws import DynamoDB
 from flask import request, Response, jsonify
 
 # Create and configure the Flask app
@@ -28,10 +29,12 @@ def test():
 # POST /api/v1/shops/可不可?latitude=24.7961217&longitude=120.996669
 @application.route('/api/v1/shops/<keyword>', methods=['POST', 'GET'])
 def store_shop(keyword):
-    try:
+    # try:
         location = request.args
 
         api = Gmap_API()
+        dynamodb = DynamoDB()
+
         response = api.nearbysearch(keyword, location)
         if response['status'] == 'OK':
             places = response['results']
@@ -42,6 +45,9 @@ def store_shop(keyword):
                 processed_place = process_place_data(place, place_details)
                 save_places.append(processed_place)
 
+            # save to dynamoDB
+            dynamodb.insert_data('shops', save_places)
+
             return jsonify(save_places)
         elif response['status'] == 'ZERO_RESULTS':
             return response, 404
@@ -49,10 +55,16 @@ def store_shop(keyword):
             return response, 400
     # except BadRequestKeyError:
     #     return "Bad request", 400
-    except Exception as e:
+    # except Exception as e:
         # print(type(e).__name_)
         # print(e)
-        return "Internal Error", 500
+        # return "Internal Error", 500
+
+
+# GET /api/v1/shops?keyword=可不可
+# @application.route('/api/v1/shops', methods=['GET'])
+# def list_shop():
+
 
 # GET /menus?keyword={keyword}&searchby={shop/drink}
 @application.route("/api/v1/menus")
@@ -102,13 +114,13 @@ def process_place_data(place, place_details):
         "shopname": place['name'],
         "place_id": place['place_id'],
         "url": place_details['url'],
-        "location": place['geometry']['location'],
+        "location": {key: str(value) for key, value in place['geometry']['location'].items()},
         "opening_now": place_details['opening_hours']['open_now'],
         "opening_hours": place_details['opening_hours']['weekday_text'],
         # "reviews": [item for item in place_details['reviews'] for key in item.keys() if key == "rating"]
         "address": place_details['formatted_address'],
         "phone_number": place_details['formatted_phone_number'],
-        "rating": place['rating'],
+        "rating": str(place['rating']),
         "reviews": place_details['reviews']
     }
 
