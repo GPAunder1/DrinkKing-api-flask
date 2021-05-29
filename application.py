@@ -1,14 +1,16 @@
 import flask
 import json
 import yaml
+from flask import request, Response, jsonify
+from werkzeug.exceptions import BadRequestKeyError
 from googlemap_api import Gmap_API
 from aws import DynamoDB
-from flask import request, Response, jsonify
 
 # Create and configure the Flask app
 application = flask.Flask(__name__)
 application.config.from_object('default_config')
 application.debug = application.config['FLASK_DEBUG'] in ['true', 'True']
+application.config['JSON_SORT_KEYS'] = False
 
 # load config
 stream = open('./config/secrets.yaml', 'r')
@@ -29,7 +31,7 @@ def test():
 # POST /api/v1/shops/可不可?latitude=24.7961217&longitude=120.996669
 @application.route('/api/v1/shops/<keyword>', methods=['POST', 'GET'])
 def store_shop(keyword):
-    # try:
+    try:
         location = request.args
 
         api = Gmap_API()
@@ -53,17 +55,34 @@ def store_shop(keyword):
             return response, 404
         else:
             return response, 400
-    # except BadRequestKeyError:
-    #     return "Bad request", 400
-    # except Exception as e:
-        # print(type(e).__name_)
-        # print(e)
+    except BadRequestKeyError:
+        return "Bad request", 400
+    except Exception as e:
+        return e, 500  # for debug
         # return "Internal Error", 500
 
 
 # GET /api/v1/shops?keyword=可不可
-# @application.route('/api/v1/shops', methods=['GET'])
-# def list_shop():
+@application.route('/api/v1/shops', methods=['GET'])
+def list_shop():
+    try:
+        keyword = request.args.get("keyword")
+        dynamodb = DynamoDB()
+
+        shops = dynamodb.fetch_data('shops', keyword)
+
+        for shop in shops:
+            with open("./assets/shops_menu.json", encoding="utf-8") as f:
+                data = json.load(f)
+                menu_info = findByShopName(shop['shopname'], data)
+                if menu_info:
+                    shop['fb_url'] = menu_info[0]['fb_url']
+                    shop['menu'] = menu_info[0]['drinks']
+
+        return jsonify(shops), 200
+    except Exception as e:
+        return e, 500  # for debug
+        # return "Internal Error", 500
 
 
 # GET /menus?keyword={keyword}&searchby={shop/drink}
@@ -85,17 +104,16 @@ def getShopMenu():
                 result = shop_result + drink_result
             f.close()
 
-        if result == None:
+        if result is None:
             return "Not found", 404
         return jsonify(result), 200
     except Exception as e:
-        print(e)
         return "Internal Error", 500
 
 
 def findByShopName(shopname, data):
     for shop in data:
-        if shopname in shop["shopname"]:
+        if shopname in shop["shopname"] or shop["shopname"] in shopname:
             return [shop]
     return []
 
@@ -125,10 +143,10 @@ def process_place_data(place, place_details):
     }
 
     for review in save_place['reviews']:
+        review['rating'] = str(review['rating'])  # dynamoDB scan return "Decimal problem"
         unwanted = set(review.keys()) - set({'author_name', 'rating', 'relative_time_description', 'text'})
         for key in unwanted:
             del review[key]
-
 
     return save_place
 

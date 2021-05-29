@@ -1,4 +1,5 @@
 import boto3
+from boto3.dynamodb.conditions import Key, Attr
 
 class DynamoDB:
     def __init__(self):
@@ -23,11 +24,11 @@ class DynamoDB:
                 {
                     'AttributeName': 'place_id',
                     'AttributeType': 'S'
-                },
+                }
             ],
             ProvisionedThroughput={
-                'ReadCapacityUnits': 10,
-                'WriteCapacityUnits': 10
+                'ReadCapacityUnits': 1,
+                'WriteCapacityUnits': 1
             }
         )
         return table
@@ -36,3 +37,14 @@ class DynamoDB:
         table = self.dynamodb.Table(table_name)
         for data in datas:
             table.put_item(Item=data)
+
+    def fetch_data(self, table_name, keyword):
+        table = self.dynamodb.Table(table_name)
+
+        response = table.scan(
+            FilterExpression="contains (shopname, :shopnameVal)",
+            ExpressionAttributeValues={":shopnameVal": keyword}
+        )
+
+        # return response['Items']
+        return response['Items']
