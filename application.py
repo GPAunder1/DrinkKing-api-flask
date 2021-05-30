@@ -2,15 +2,17 @@ import flask
 import json
 import yaml
 from flask import request, Response, jsonify
+from flask_cors import CORS
 from werkzeug.exceptions import BadRequestKeyError
 from googlemap_api import Gmap_API
-from aws import DynamoDB
+from aws import DynamoDB, IOT_CORE
 
 # Create and configure the Flask app
 application = flask.Flask(__name__)
 application.config.from_object('default_config')
 application.debug = application.config['FLASK_DEBUG'] in ['true', 'True']
 application.config['JSON_SORT_KEYS'] = False
+CORS(application)
 
 # load config
 stream = open('./config/secrets.yaml', 'r')
@@ -20,12 +22,6 @@ config = yaml.load(stream)['production']
 @application.route('/')
 def index():
     return {"status":"ok","message":"DrinkKing API v1 at /api/v1/ in production mode"}, 200
-
-
-@application.route('/test')
-def test():
-    print(config)
-    return ""
 
 
 # POST /api/v1/shops/可不可?latitude=24.7961217&longitude=120.996669
@@ -38,6 +34,7 @@ def store_shop(keyword):
         dynamodb = DynamoDB()
 
         response = api.nearbysearch(keyword, location)
+
         if response['status'] == 'OK':
             places = response['results']
 
@@ -65,9 +62,10 @@ def store_shop(keyword):
 # GET /api/v1/shops?keyword=可不可
 @application.route('/api/v1/shops', methods=['GET'])
 def list_shop():
-    try:
+    # try:
         keyword = request.args.get("keyword")
         dynamodb = DynamoDB()
+        iot_client = IOT_CORE()
 
         shops = dynamodb.fetch_data('shops', keyword)
 
@@ -79,9 +77,14 @@ def list_shop():
                     shop['fb_url'] = menu_info[0]['fb_url']
                     shop['menu'] = menu_info[0]['drinks']
 
+                #  publish to MQTT topic
+                place_id_data = {"place_id": shop['place_id']}
+                response = iot_client.publish_to_topic("drinkshop_pie", place_id_data)
+                # print(response)
+
         return jsonify(shops), 200
-    except Exception as e:
-        return e, 500  # for debug
+    # except Exception as e:
+    #     return e, 500  # for debug
         # return "Internal Error", 500
 
 
@@ -135,7 +138,6 @@ def process_place_data(place, place_details):
         "location": {key: str(value) for key, value in place['geometry']['location'].items()},
         "opening_now": place_details['opening_hours']['open_now'],
         "opening_hours": place_details['opening_hours']['weekday_text'],
-        # "reviews": [item for item in place_details['reviews'] for key in item.keys() if key == "rating"]
         "address": place_details['formatted_address'],
         "phone_number": place_details['formatted_phone_number'],
         "rating": str(place['rating']),

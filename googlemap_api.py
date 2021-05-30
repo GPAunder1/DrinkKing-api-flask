@@ -16,6 +16,7 @@ class Gmap_API:
     def nearbysearch(self, keyword, location):
         latitude = location['latitude']
         longitude = location['longitude']
+
         parameter = 'location={0},{1}&radius=2000&keyword={2}&language=zh-TW'.format(latitude, longitude, keyword)
         # parameter = "location=#{location[0]},#{location[1]}&radius=2000&keyword=#{keyword}&language=zh-TW"
         url = "{0}/nearbysearch/json?key={1}&{2}".format(self.API_ROOT, self.TOKEN, parameter)

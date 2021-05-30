@@ -1,5 +1,6 @@
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+import json
+
 
 class DynamoDB:
     def __init__(self):
@@ -48,3 +49,12 @@ class DynamoDB:
 
         # return response['Items']
         return response['Items']
+
+
+class IOT_CORE:
+    def __init__(self):
+        self.iot_client = boto3.client('iot-data')
+
+    def publish_to_topic(self, topic, data):
+        response = self.iot_client.publish(topic=topic, qos=1, payload=json.dumps(data))
+        return response
