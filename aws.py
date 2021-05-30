@@ -53,7 +53,7 @@ class DynamoDB:
 
 class IOT_CORE:
     def __init__(self):
-        self.iot_client = boto3.client('iot-data')
+        self.iot_client = boto3.client('iot-data', region_name='us-east-1')
 
     def publish_to_topic(self, topic, data):
         response = self.iot_client.publish(topic=topic, qos=1, payload=json.dumps(data))
